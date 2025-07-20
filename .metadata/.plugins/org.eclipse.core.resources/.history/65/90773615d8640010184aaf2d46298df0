@@ -1,0 +1,140 @@
+
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.w3c.dom.*;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+
+public class TagExtractor {
+
+    public static void main(String[] args) {
+        try {
+            String filePath = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx";
+            FileInputStream file = new FileInputStream(new File(filePath));
+            Workbook workbook = new XSSFWorkbook(file);
+            Sheet sheet = workbook.getSheetAt(0);
+
+            Row headerRow = sheet.getRow(0);
+            int requestPacketIndex = -1;
+            int responsePacketIndex = -1;
+
+            // Find the Request_Packet and Response_Packet column indexes
+            for (Cell cell : headerRow) {
+                String cellValue = cell.getStringCellValue().trim();
+                if (cellValue.equalsIgnoreCase("Request_Packet")) {
+                    requestPacketIndex = cell.getColumnIndex();
+                } else if (cellValue.equalsIgnoreCase("Response_Packet")) {
+                    responsePacketIndex = cell.getColumnIndex();
+                }
+            }
+
+            if (requestPacketIndex == -1 && responsePacketIndex == -1) {
+                System.out.println("Request_Packet or Response_Packet column not found.");
+                return;
+            }
+
+            // Loop through each row to extract tags
+            for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (row == null) continue;
+
+                Set<String> requestTags = new HashSet<>();
+                Set<String> responseTags = new HashSet<>();
+
+                if (requestPacketIndex != -1) {
+                    Cell requestCell = row.getCell(requestPacketIndex);
+                    if (requestCell != null) {
+                        String requestContent = requestCell.toString().trim();
+                        if (!requestContent.isEmpty()) {
+                            requestTags = extractTags(requestContent);
+                        }
+                    }
+                }
+
+                if (responsePacketIndex != -1) {
+                    Cell responseCell = row.getCell(responsePacketIndex);
+                    if (responseCell != null) {
+                        String responseContent = responseCell.toString().trim();
+                        if (!responseContent.isEmpty()) {
+                            responseTags = extractTags(responseContent);
+                        }
+                    }
+                }
+
+                int tagColumnStart = headerRow.getLastCellNum();
+                int i = 0;
+                for (String tag : requestTags) {
+                    Cell tagCell = row.createCell(tagColumnStart + i);
+                    tagCell.setCellValue(tag);
+                    if (rowIndex == 1) {
+                        Cell headerCell = headerRow.createCell(tagColumnStart + i);
+                        headerCell.setCellValue("RequestTag" + (i + 1));
+                    }
+                    i++;
+                }
+
+                int responseTagStart = tagColumnStart + i;
+                int j = 0;
+                for (String tag : responseTags) {
+                    Cell tagCell = row.createCell(responseTagStart + j);
+                    tagCell.setCellValue(tag);
+                    if (rowIndex == 1) {
+                        Cell headerCell = headerRow.createCell(responseTagStart + j);
+                        headerCell.setCellValue("ResponseTag" + (j + 1));
+                    }
+                    j++;
+                }
+            }
+
+            file.close();
+            FileOutputStream outFile = new FileOutputStream(new File(filePath));
+            workbook.write(outFile);
+            outFile.close();
+            workbook.close();
+
+            System.out.println("Excel updated with extracted tags.");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static Set<String> extractTags(String packetContent) {
+        Set<String> tags = new HashSet<>();
+        try {
+            packetContent = packetContent.trim();
+            if (packetContent.startsWith("{")) {
+                JSONObject jsonObject = new JSONObject(packetContent);
+                Iterator<String> keys = jsonObject.keys();
+                while (keys.hasNext()) {
+                    tags.add(keys.next());
+                }
+            } else if (packetContent.startsWith("<")) {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document doc = builder.parse(new java.io.ByteArrayInputStream(packetContent.getBytes()));
+                doc.getDocumentElement().normalize();
+                Node root = doc.getDocumentElement();
+                NodeList children = root.getChildNodes();
+                for (int i = 0; i < children.getLength(); i++) {
+                    Node child = children.item(i);
+                    if (child.getNodeType() == Node.ELEMENT_NODE) {
+                        tags.add(child.getNodeName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error parsing packet: " + packetContent);
+            e.printStackTrace();
+        }
+        return tags;
+    }
+}

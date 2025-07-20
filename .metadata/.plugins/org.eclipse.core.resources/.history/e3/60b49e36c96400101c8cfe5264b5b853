@@ -1,0 +1,210 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String filePath = "D:\\tamp\\data_for_parsing_Dhananjay.xlsx";
+        System.out.println("Start Processing: " + filePath);
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+
+            List<List<String>> allRequestTagsList = new ArrayList<>();
+            List<List<String>> allResponseTagsList = new ArrayList<>();
+            List<String> allRemarks = new ArrayList<>();
+            List<String> allTypes = new ArrayList<>();
+            List<String> allRequestTagsCombined = new ArrayList<>();
+            List<String> allResponseTagsCombined = new ArrayList<>();
+
+            int maxReqTags = 0;
+            int maxResTags = 0;
+
+            for (Row row : sheet) {
+                if (row.getRowNum() < 3) continue;
+
+                String request = getCellValue(row.getCell(9));
+                String response = getCellValue(row.getCell(10));
+
+                StringBuilder remarks = new StringBuilder();
+                String requestType = detectPacketType(request);
+                String responseType = detectPacketType(response);
+
+                Set<String> requestTags = new LinkedHashSet<>();
+                Set<String> responseTags = new LinkedHashSet<>();
+
+                extractTagsWithValidation(request, remarks, "Request", requestTags);
+                extractTagsWithValidation(response, remarks, "Response", responseTags);
+
+                allRequestTagsList.add(new ArrayList<>(requestTags));
+                allResponseTagsList.add(new ArrayList<>(responseTags));
+                allRequestTagsCombined.add(String.join(",", requestTags));
+                allResponseTagsCombined.add(String.join(",", responseTags));
+                allRemarks.add(remarks.toString());
+                allTypes.add(requestType + " / " + responseType);
+
+                maxReqTags = Math.max(maxReqTags, requestTags.size());
+                maxResTags = Math.max(maxResTags, responseTags.size());
+            }
+
+            int requestStartCol = 50;
+            int responseStartCol = requestStartCol + maxReqTags;
+            int remarkCol = responseStartCol + maxResTags;
+            int typeCol = remarkCol + 1;
+            int allRequestCol = typeCol + 1;
+            int allResponseCol = allRequestCol + 1;
+
+            createHeaders(sheet, requestStartCol, maxReqTags, responseStartCol, maxResTags, remarkCol, typeCol, allRequestCol, allResponseCol);
+
+            for (int i = 0; i < allRequestTagsList.size(); i++) {
+                Row row = sheet.getRow(i + 3);
+                if (row == null) row = sheet.createRow(i + 3);
+
+                List<String> reqTags = allRequestTagsList.get(i);
+                List<String> resTags = allResponseTagsList.get(i);
+
+                for (int j = 0; j < reqTags.size(); j++)
+                    row.createCell(requestStartCol + j).setCellValue(reqTags.get(j));
+
+                for (int j = 0; j < resTags.size(); j++)
+                    row.createCell(responseStartCol + j).setCellValue(resTags.get(j));
+
+                row.createCell(remarkCol).setCellValue(allRemarks.get(i));
+                row.createCell(typeCol).setCellValue(allTypes.get(i));
+                row.createCell(allRequestCol).setCellValue(allRequestTagsCombined.get(i));
+                row.createCell(allResponseCol).setCellValue(allResponseTagsCombined.get(i));
+            }
+
+            try (FileOutputStream out = new FileOutputStream(filePath)) {
+                workbook.write(out);
+                System.out.println("Updated file saved at: " + filePath);
+            }
+
+            workbook.close();
+            System.out.println("Done.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void createHeaders(Sheet sheet, int reqCol, int reqCount, int resCol, int resCount, int remarkCol, int typeCol, int allReqCol, int allResCol) {
+        Row row1 = sheet.getRow(1); if (row1 == null) row1 = sheet.createRow(1);
+        Row row2 = sheet.getRow(2); if (row2 == null) row2 = sheet.createRow(2);
+
+        if (reqCount > 0) {
+            sheet.addMergedRegion(new CellRangeAddress(1, 1, reqCol, reqCol + reqCount - 1));
+            row1.createCell(reqCol).setCellValue("Request");
+            for (int i = 0; i < reqCount; i++)
+                row2.createCell(reqCol + i).setCellValue("Tag" + (i + 1));
+        }
+
+        if (resCount > 0) {
+            sheet.addMergedRegion(new CellRangeAddress(1, 1, resCol, resCol + resCount - 1));
+            row1.createCell(resCol).setCellValue("Response");
+            for (int i = 0; i < resCount; i++)
+                row2.createCell(resCol + i).setCellValue("Tag" + (i + 1));
+        }
+
+        row1.createCell(remarkCol).setCellValue("Remark");
+        row2.createCell(remarkCol).setCellValue("Remark");
+
+        row1.createCell(typeCol).setCellValue("Type");
+        row2.createCell(typeCol).setCellValue("Type");
+
+        row1.createCell(allReqCol).setCellValue("All Request Tags");
+        row2.createCell(allReqCol).setCellValue("All Request Tags");
+
+        row1.createCell(allResCol).setCellValue("All Response Tags");
+        row2.createCell(allResCol).setCellValue("All Response Tags");
+    }
+
+    private static String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            default -> cell.toString();
+        };
+    }
+
+    private static String detectPacketType(String content) {
+        if (content == null || content.trim().isEmpty()) return "Empty";
+        content = content.trim();
+        if (content.startsWith("{") || content.startsWith("[")) return "JSON";
+        if (content.startsWith("<")) return "XML";
+        return "Invalid";
+    }
+
+    private static void extractTagsWithValidation(String content, StringBuilder remarks, String fieldName, Set<String> tags) {
+        if (content == null || content.trim().isEmpty()) return;
+        content = content.trim();
+        try {
+            if (content.startsWith("{") || content.startsWith("[")) {
+                Object json = new JSONTokener(content).nextValue();
+                if (json instanceof JSONObject jo) {
+                    extractJsonKeys(jo, tags);
+                } else if (json instanceof JSONArray ja) {
+                    for (int i = 0; i < ja.length(); i++) {
+                        Object item = ja.get(i);
+                        if (item instanceof JSONObject joItem)
+                            extractJsonKeys(joItem, tags);
+                    }
+                } else {
+                    remarks.append(fieldName).append(" is not valid JSON. ");
+                }
+            } else if (content.startsWith("<")) {
+                DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                Document doc = builder.parse(new InputSource(new StringReader(content)));
+                extractXmlTags(doc.getDocumentElement(), tags);
+            } else {
+                remarks.append(fieldName).append(" is neither valid JSON nor XML. ");
+            }
+        } catch (Exception e) {
+            remarks.append(fieldName).append(" is not valid JSON or XML. ");
+        }
+    }
+
+    private static void extractJsonKeys(JSONObject jsonObject, Set<String> keys) {
+        for (Iterator<String> it = jsonObject.keys(); it.hasNext(); ) {
+            String key = it.next();
+            keys.add(key);
+            Object value = jsonObject.get(key);
+            if (value instanceof JSONObject)
+                extractJsonKeys((JSONObject) value, keys);
+            else if (value instanceof JSONArray arr) {
+                for (int i = 0; i < arr.length(); i++) {
+                    Object item = arr.get(i);
+                    if (item instanceof JSONObject)
+                        extractJsonKeys((JSONObject) item, keys);
+                }
+            }
+        }
+    }
+
+    private static void extractXmlTags(Node node, Set<String> tags) {
+        tags.add(node.getNodeName());
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE)
+                extractXmlTags(child, tags);
+        }
+    }
+}

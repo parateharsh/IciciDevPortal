@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: ORM reversefeed
+  description: Source/Frontend-Profunds
+  version: 1.0.11
+servers:
+  - url: 'https://ktfsd.kalyanicorp.com/out/b0001/trade/orm-reverse-feed'
+tags:
+  - name: ORM reversefeed
+paths:
+  /ecollection-intimation:
+    post:
+      tags:
+        - ORM reversefeed
+      requestBody:
+        description: API gateway Request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/request'
+      responses:
+        '200':
+          description: 200 Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/response'
+components:
+  schemas:
+    request:
+      type: object
+      properties:
+        transaction_date:
+          type: string
+          description: Sample transaction_date
+        transaction_status:
+          type: string
+          description: Sample transaction_status
+        remit_amount_in_fc:
+          type: string
+          description: Sample remit_amount_in_fc
+        total_taxes:
+          type: string
+          description: Sample total_taxes
+        document:
+          type: string
+          description: Sample document
+        bank_reference_number:
+          type: string
+          description: Sample bank_reference_number
+        charges_account_no:
+          type: string
+          description: Sample charges_account_no
+        bene_details:
+          type: string
+          description: Sample bene_details
+        hs_code:
+          type: string
+          description: Sample hs_code
+        total_charges:
+          type: string
+          description: Sample total_charges
+        charges_breakup:
+          type: string
+          description: Sample charges_breakup
+        product_type:
+          type: string
+          description: Sample product_type
+        debit_details:
+          type: string
+          description: Sample debit_details
+        tol_reference_no:
+          type: string
+          description: Sample tol_reference_no
+        gst_no:
+          type: string
+          description: Sample gst_no
+        customer_reference_number:
+          type: string
+          description: Sample customer_reference_number
+        bank_gst_no:
+          type: string
+          description: Sample bank_gst_no
+        value_of_supply_for_fc_conversion:
+          type: string
+          description: Sample value_of_supply_for_fc_conversion
+        currency:
+          type: string
+          description: Sample currency
+        purpose_code:
+          type: string
+          description: Sample purpose_code
+        cust_id:
+          type: string
+          description: Sample cust_id
+        remit_mode:
+          type: string
+          description: Sample remit_mode
+        discrepancy_reason:
+          type: string
+          description: Sample discrepancy_reason
+    response:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Sample status
+        errorCode:
+          type: string
+          description: Sample errorCode
+        message:
+          type: string
+          description: Sample message

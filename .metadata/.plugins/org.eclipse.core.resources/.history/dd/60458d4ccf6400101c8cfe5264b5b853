@@ -1,0 +1,140 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import org.json.JSONTokener;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import org.xml.sax.InputSource;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String filePath = "data_for_parsing_Dhananjay-Copy.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+
+            // Get header row
+            Row headerRow = sheet.getRow(0);
+            int requestIndex = findColumnIndex(headerRow, "Request_Packet");
+            int responseIndex = findColumnIndex(headerRow, "Response_Packet");
+
+            // Add headers for new columns if not already present
+            int requestTagsIndex = headerRow.getLastCellNum();
+            headerRow.createCell(requestTagsIndex).setCellValue("Request Tags");
+            int responseTagsIndex = headerRow.getLastCellNum();
+            headerRow.createCell(responseTagsIndex).setCellValue("Response Tags");
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String requestData = getCellValue(row, requestIndex);
+                String responseData = getCellValue(row, responseIndex);
+
+                String requestTags = extractTags(requestData);
+                String responseTags = extractTags(responseData);
+
+                row.createCell(requestTagsIndex).setCellValue(requestTags);
+                row.createCell(responseTagsIndex).setCellValue(responseTags);
+            }
+
+            // Write back to same file
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                workbook.write(fos);
+            }
+
+            System.out.println("Tags extracted and written successfully to same file.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static int findColumnIndex(Row headerRow, String columnName) {
+        for (Cell cell : headerRow) {
+            if (cell.getStringCellValue().trim().equalsIgnoreCase(columnName)) {
+                return cell.getColumnIndex();
+            }
+        }
+        return -1;
+    }
+
+    private static String getCellValue(Row row, int index) {
+        if (index < 0 || row.getCell(index) == null) return "";
+        Cell cell = row.getCell(index);
+        if (cell.getCellType() == CellType.STRING) return cell.getStringCellValue();
+        return "";
+    }
+
+    private static String extractTags(String input) {
+        if (input == null || input.trim().isEmpty()) return "";
+
+        input = input.trim();
+        Set<String> tags = new TreeSet<>();
+        try {
+            if (input.startsWith("<")) {
+                // XML
+                DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+                Document doc = dBuilder.parse(new InputSource(new StringReader(input)));
+                doc.getDocumentElement().normalize();
+                traverseXML(doc.getDocumentElement(), tags);
+            } else {
+                // JSON
+                Object json = new JSONTokener(input).nextValue();
+                if (json instanceof JSONObject) {
+                    traverseJSON((JSONObject) json, tags);
+                } else if (json instanceof JSONArray) {
+                    traverseJSON((JSONArray) json, tags);
+                }
+            }
+        } catch (Exception e) {
+            return "Invalid JSON/XML";
+        }
+
+        return String.join(", ", tags);
+    }
+
+    private static void traverseXML(Node node, Set<String> tags) {
+        if (node.getNodeType() == Node.ELEMENT_NODE) {
+            tags.add(node.getNodeName());
+        }
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            traverseXML(children.item(i), tags);
+        }
+    }
+
+    private static void traverseJSON(JSONObject jsonObj, Set<String> tags) {
+        for (String key : jsonObj.keySet()) {
+            tags.add(key);
+            Object val = jsonObj.get(key);
+            if (val instanceof JSONObject) {
+                traverseJSON((JSONObject) val, tags);
+            } else if (val instanceof JSONArray) {
+                traverseJSON((JSONArray) val, tags);
+            }
+        }
+    }
+
+    private static void traverseJSON(JSONArray jsonArr, Set<String> tags) {
+        for (int i = 0; i < jsonArr.length(); i++) {
+            Object val = jsonArr.get(i);
+            if (val instanceof JSONObject) {
+                traverseJSON((JSONObject) val, tags);
+            } else if (val instanceof JSONArray) {
+                traverseJSON((JSONArray) val, tags);
+            }
+        }
+    }
+}

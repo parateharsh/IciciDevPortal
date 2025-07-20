@@ -1,0 +1,155 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import org.xml.sax.InputSource;
+
+public class TagExtractorWithDynamicTags {
+
+    public static void main(String[] args) {
+        String filePath = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+
+            int requestCol = -1, responseCol = -1;
+            int allReqTagsCol = -1, allResTagsCol = -1;
+
+            // Find column indexes
+            for (Cell cell : headerRow) {
+                String cellVal = cell.getStringCellValue();
+                if ("Request_Packet".equalsIgnoreCase(cellVal)) requestCol = cell.getColumnIndex();
+                else if ("Response_Packet".equalsIgnoreCase(cellVal)) responseCol = cell.getColumnIndex();
+                else if ("All Request Tags".equalsIgnoreCase(cellVal)) allReqTagsCol = cell.getColumnIndex();
+                else if ("All Response Tags".equalsIgnoreCase(cellVal)) allResTagsCol = cell.getColumnIndex();
+            }
+
+            if (requestCol == -1 || responseCol == -1) {
+                System.err.println("Request_Packet or Response_Packet column not found.");
+                return;
+            }
+
+            // Clear old Tag columns beyond Tag2
+            for (int i = 0; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row != null) {
+                    for (int j = 0; j < row.getLastCellNum(); j++) {
+                        String cellValue = Optional.ofNullable(row.getCell(j))
+                                .map(Cell::getStringCellValue).orElse("");
+                        if (cellValue.matches("(?i)(Tag\\d+|ResponseTag\\d+)")) {
+                            row.getCell(j).setCellValue("");
+                        }
+                    }
+                }
+            }
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String reqPacket = getCellValue(row.getCell(requestCol));
+                String resPacket = getCellValue(row.getCell(responseCol));
+
+                List<String> requestTags = extractTags(reqPacket);
+                List<String> responseTags = extractTags(resPacket);
+
+                // Write request tags: Tag1, Tag2, ...
+                for (int j = 0; j < requestTags.size(); j++) {
+                    Cell tagCell = row.createCell(headerRow.getLastCellNum() + j);
+                    tagCell.setCellValue(requestTags.get(j));
+                    if (i == 0) headerRow.createCell(tagCell.getColumnIndex()).setCellValue("Tag" + (j + 1));
+                }
+
+                // Write response tags: ResponseTag1, ResponseTag2, ...
+                int responseStartIndex = headerRow.getLastCellNum();
+                for (int j = 0; j < responseTags.size(); j++) {
+                    Cell tagCell = row.createCell(responseStartIndex + j);
+                    tagCell.setCellValue(responseTags.get(j));
+                    if (i == 0)
+                        headerRow.createCell(tagCell.getColumnIndex()).setCellValue("ResponseTag" + (j + 1));
+                }
+
+                // Write All Request Tags
+                if (allReqTagsCol != -1)
+                    row.createCell(allReqTagsCol).setCellValue(String.join(",", requestTags));
+
+                // Write All Response Tags
+                if (allResTagsCol != -1)
+                    row.createCell(allResTagsCol).setCellValue(String.join(",", responseTags));
+            }
+
+            // Save the workbook back to file
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                workbook.write(fos);
+                System.out.println("Tags extracted and saved successfully.");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        if (cell.getCellType() == CellType.STRING) return cell.getStringCellValue();
+        if (cell.getCellType() == CellType.NUMERIC) return String.valueOf(cell.getNumericCellValue());
+        return "";
+    }
+
+    private static List<String> extractTags(String content) {
+        List<String> tags = new ArrayList<>();
+        if (content == null || content.trim().isEmpty()) return tags;
+
+        try {
+            if (content.trim().startsWith("<")) {
+                // XML parsing
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(false);
+                factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document doc = builder.parse(new InputSource(new StringReader(content)));
+                Node root = doc.getDocumentElement();
+                collectXMLTags(root, tags);
+            } else {
+                // JSON parsing
+                JSONObject json = new JSONObject(content);
+                collectJSONKeys(json, tags, "");
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to parse content: " + content);
+        }
+        return tags;
+    }
+
+    private static void collectJSONKeys(JSONObject json, List<String> tags, String prefix) {
+        for (String key : json.keySet()) {
+            Object value = json.get(key);
+            if (value instanceof JSONObject) {
+                collectJSONKeys((JSONObject) value, tags, prefix + key + ".");
+            } else {
+                tags.add(prefix + key);
+            }
+        }
+    }
+
+    private static void collectXMLTags(Node node, List<String> tags) {
+        if (node.getNodeType() == Node.ELEMENT_NODE) {
+            tags.add(node.getNodeName());
+        }
+
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            collectXMLTags(children.item(i), tags);
+        }
+    }
+}

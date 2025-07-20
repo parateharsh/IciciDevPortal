@@ -1,0 +1,99 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.XML;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) throws Exception {
+
+        String excelPath = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx";
+        FileInputStream fis = new FileInputStream(excelPath);
+        Workbook workbook = new XSSFWorkbook(fis);
+        Sheet sheet = workbook.getSheetAt(0);
+
+        // Get header row to find Request_Packet and Response_Packet column indexes
+        Row headerRow = sheet.getRow(0);
+        int reqIndex = -1, resIndex = -1;
+        int lastColumn = headerRow.getLastCellNum();
+
+        for (int i = 0; i < lastColumn; i++) {
+            Cell cell = headerRow.getCell(i);
+            if (cell == null) continue;
+            String colName = cell.getStringCellValue().trim();
+            if (colName.equalsIgnoreCase("Request_Packet")) reqIndex = i;
+            if (colName.equalsIgnoreCase("Response_Packet")) resIndex = i;
+        }
+
+        if (reqIndex == -1 && resIndex == -1) {
+            System.out.println("Request_Packet or Response_Packet column not found.");
+            return;
+        }
+
+        // Add new headers
+        int requestTagIndex = lastColumn;
+        int responseTagIndex = lastColumn + 1;
+        headerRow.createCell(requestTagIndex).setCellValue("Request_Tags");
+        headerRow.createCell(responseTagIndex).setCellValue("Response_Tags");
+
+        for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            String reqText = reqIndex != -1 && row.getCell(reqIndex) != null ? row.getCell(reqIndex).toString().trim() : "";
+            String resText = resIndex != -1 && row.getCell(resIndex) != null ? row.getCell(resIndex).toString().trim() : "";
+
+            String reqTags = extractTags(reqText);
+            String resTags = extractTags(resText);
+
+            row.createCell(requestTagIndex).setCellValue(reqTags);
+            row.createCell(responseTagIndex).setCellValue(resTags);
+        }
+
+        // Write changes back into same file
+        fis.close();
+        FileOutputStream fos = new FileOutputStream(excelPath);
+        workbook.write(fos);
+        fos.close();
+        workbook.close();
+
+        System.out.println("Tags extracted and written into the same sheet successfully.");
+    }
+
+    private static String extractTags(String input) {
+        if (input == null || input.isEmpty()) return "";
+
+        try {
+            if (input.trim().startsWith("{")) {
+                // JSON
+                JSONObject json = new JSONObject(input);
+                return String.join(", ", json.keySet());
+            } else if (input.trim().startsWith("<")) {
+                // XML
+                Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                        .parse(new ByteArrayInputStream(input.getBytes()));
+                Element root = doc.getDocumentElement();
+                NodeList nodeList = root.getChildNodes();
+                Set<String> tags = new LinkedHashSet<>();
+                for (int i = 0; i < nodeList.getLength(); i++) {
+                    Node node = nodeList.item(i);
+                    if (node.getNodeType() == Node.ELEMENT_NODE) {
+                        tags.add(node.getNodeName());
+                    }
+                }
+                return String.join(", ", tags);
+            }
+        } catch (Exception e) {
+            return "Invalid Format";
+        }
+
+        return "Unknown Format";
+    }
+}

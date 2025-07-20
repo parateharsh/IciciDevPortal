@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Context>
+<!-- 		  <Resource name="jdbc/devportalmysql"
+		  global="jdbc/devportalmysql"
+		  auth="Container"
+		  type="javax.sql.DataSource"
+		  factory="com.icici.apigw.db.CompEncryptedDataSourceFactory"
+		  validationInterval="30000"
+		  maxTotal="500"
+		  minIdle="10"
+		  maxWaitMillis="10000"
+		  initialSize="10"
+		  jmxEnabled="true"
+		  username="pMvMA2t4Pr/hxYTuMRi6og=="
+		  password="uz13EMBxya21B7cjaHqUmQ=="
+		  driverClassName="oracle.jdbc.driver.OracleDriver"
+		  url="jdbc:oracle:thin:@10.75.8.62:9056:APIGWUAT"/> -->
+		  
+	<!-- <Resource name="jdbc/devportal"
+          global="jdbc/devportal"
+          auth="Container"
+          type="javax.sql.DataSource"
+          validationInterval="30000"
+          maxTotal="500"
+          minIdle="10"
+          maxWaitMillis="10000"
+          initialSize="10"
+          jmxEnabled="true"
+          username="SYSTEM"
+          password="orcl"
+          driverClassName="oracle.jdbc.driver.OracleDriver"
+          url="jdbc:oracle:thin:@localhost:1521:xe"/> -->
+	<Resource name="jdbc/devportal"
+          global="jdbc/devportal"
+          auth="Container"
+          type="javax.sql.DataSource"
+          validationInterval="30000"
+          maxTotal="500"
+          minIdle="10"
+          maxWaitMillis="10000"
+          initialSize="10"
+          jmxEnabled="true"
+          username="system"
+          password="harsh"
+          driverClassName="oracle.jdbc.driver.OracleDriver"
+          url="jdbc:oracle:thin:@localhost:1521:xe"/>
+
+		  
+		  
+<!-- DB server IP: 10.75.8.62
+DB username: apigw_uat
+DB Password : APIGW_UAT_1234567  -->
+		  
+		  	  
+</Context>

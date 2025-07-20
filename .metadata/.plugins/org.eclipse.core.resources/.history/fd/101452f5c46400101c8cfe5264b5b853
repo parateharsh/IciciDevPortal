@@ -1,0 +1,436 @@
+//package com.example.demo;
+//import org.apache.poi.ss.usermodel.*;
+//import org.apache.poi.ss.util.CellRangeAddress;
+//import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+//import org.json.JSONArray;
+//import org.json.JSONObject;
+//import org.json.JSONTokener;
+//import org.w3c.dom.*;
+//import org.xml.sax.InputSource;
+//
+//import javax.xml.parsers.DocumentBuilder;
+//import javax.xml.parsers.DocumentBuilderFactory;
+//import java.io.*;
+//import java.util.*;
+//
+//public class TagExtractorWithDynamicColumns {
+//
+//	public static void main(String[] args) {
+//	    System.out.println("Start: ");
+//	    String filePath = "F:\\Temp\\API_inventory_ORMG_New.xlsx";
+//
+//	    try (FileInputStream fis = new FileInputStream(filePath);
+//	         Workbook workbook = new XSSFWorkbook(fis)) {
+//
+//	        Sheet sheet = workbook.getSheetAt(0);
+//
+//	        List<List<String>> allRequestTagsList = new ArrayList<>();
+//	        List<List<String>> allResponseTagsList = new ArrayList<>();
+//	        List<String> allRemarks = new ArrayList<>();
+//	        List<String> allTypes = new ArrayList<>();
+//	        List<String> allRequestTagsCombined = new ArrayList<>();
+//	        List<String> allResponseTagsCombined = new ArrayList<>();
+//
+//	        int maxReqTags = 0;
+//	        int maxResTags = 0;
+//
+//	        // Read rows and extract tags
+//	        for (Row row : sheet) {
+//	            if (row.getRowNum() == 0 || row.getRowNum() == 1 || row.getRowNum() == 2) continue;
+//
+//	            String request = getCellValue(row.getCell(9));
+//	            String response = getCellValue(row.getCell(10));
+//
+//	            StringBuilder remarks = new StringBuilder();
+//
+//	            String requestType = detectPacketType(request);
+//	            String responseType = detectPacketType(response);
+//
+//	            Set<String> requestTags = new LinkedHashSet<>();
+//	            Set<String> responseTags = new LinkedHashSet<>();
+//
+//	            extractTagsWithValidation(request, remarks, "Request", requestTags);
+//	            extractTagsWithValidation(response, remarks, "Response", responseTags);
+//
+//	            allRequestTagsList.add(new ArrayList<>(requestTags));
+//	            allResponseTagsList.add(new ArrayList<>(responseTags));
+//
+//	            allRequestTagsCombined.add(String.join(",", requestTags));
+//	            allResponseTagsCombined.add(String.join(",", responseTags));
+//
+//	            allRemarks.add(remarks.toString());
+//	            allTypes.add(requestType + " / " + responseType);
+//
+//	            maxReqTags = Math.max(maxReqTags, requestTags.size());
+//	            maxResTags = Math.max(maxResTags, responseTags.size());
+//	        }
+//
+//	        // Define column indexes
+//	        int requestStartCol = 50;
+//	        int responseStartCol = requestStartCol + maxReqTags;
+//	        int remarkCol = responseStartCol + maxResTags;
+//	        int typeCol = remarkCol + 1;
+//	        int allRequestCol = typeCol + 1;
+//	        int allResponseCol = allRequestCol + 1;
+//
+//	        // Header rows
+//	        Row row0 = sheet.getRow(0);
+//	        if (row0 == null) row0 = sheet.createRow(0);
+//
+//	        Row row1 = sheet.getRow(1);
+//	        if (row1 == null) row1 = sheet.createRow(1);
+//
+//	        Row row2 = sheet.getRow(2);
+//	        if (row2 == null) row2 = sheet.createRow(2);
+//
+//	        // Request Tag Header
+//	        if (maxReqTags > 0) {
+//	            sheet.addMergedRegion(new CellRangeAddress(1, 1, requestStartCol, requestStartCol + maxReqTags - 1));
+//	            if (row1.getCell(requestStartCol) == null)
+//	                row1.createCell(requestStartCol).setCellValue("Request");
+//
+//	            for (int i = 0; i < maxReqTags; i++) {
+//	                if (row2.getCell(requestStartCol + i) == null)
+//	                    row2.createCell(requestStartCol + i).setCellValue("Tag" + (i + 1));
+//	            }
+//	        }
+//
+//	        // Response Tag Header
+//	        if (maxResTags > 0) {
+//	            sheet.addMergedRegion(new CellRangeAddress(1, 1, responseStartCol, responseStartCol + maxResTags - 1));
+//	            if (row1.getCell(responseStartCol) == null)
+//	                row1.createCell(responseStartCol).setCellValue("Response");
+//
+//	            for (int i = 0; i < maxResTags; i++) {
+//	                if (row2.getCell(responseStartCol + i) == null)
+//	                    row2.createCell(responseStartCol + i).setCellValue("Tag" + (i + 1));
+//	            }
+//	        }
+//
+//	        // Remark / Type / Combined Tag Headers
+//	        if (row1.getCell(remarkCol) == null) row1.createCell(remarkCol).setCellValue("Remark");
+//	        if (row2.getCell(remarkCol) == null) row2.createCell(remarkCol).setCellValue("Remark");
+//
+//	        if (row1.getCell(typeCol) == null) row1.createCell(typeCol).setCellValue("Type");
+//	        if (row2.getCell(typeCol) == null) row2.createCell(typeCol).setCellValue("Type");
+//
+//	        if (row1.getCell(allRequestCol) == null) row1.createCell(allRequestCol).setCellValue("All Request Tags");
+//	        if (row2.getCell(allRequestCol) == null) row2.createCell(allRequestCol).setCellValue("All Request Tags");
+//
+//	        if (row1.getCell(allResponseCol) == null) row1.createCell(allResponseCol).setCellValue("All Response Tags");
+//	        if (row2.getCell(allResponseCol) == null) row2.createCell(allResponseCol).setCellValue("All Response Tags");
+//
+//	        // Fill data from row 3 onward
+//	        int rowIndex = 3;
+//	        for (int i = 0; i < allRequestTagsList.size(); i++) {
+//	            Row row = sheet.getRow(rowIndex);
+//	            if (row == null) row = sheet.createRow(rowIndex);
+//
+//	            List<String> reqTags = allRequestTagsList.get(i);
+//	            List<String> resTags = allResponseTagsList.get(i);
+//
+//	            for (int j = 0; j < reqTags.size(); j++) {
+//	                row.createCell(requestStartCol + j).setCellValue(reqTags.get(j));
+//	            }
+//
+//	            for (int j = 0; j < resTags.size(); j++) {
+//	                row.createCell(responseStartCol + j).setCellValue(resTags.get(j));
+//	            }
+//
+//	            row.createCell(remarkCol).setCellValue(allRemarks.get(i));
+//	            row.createCell(typeCol).setCellValue(allTypes.get(i));
+//	            row.createCell(allRequestCol).setCellValue(allRequestTagsCombined.get(i));
+//	            row.createCell(allResponseCol).setCellValue(allResponseTagsCombined.get(i));
+//
+//	            rowIndex++;
+//	        }
+//
+//	        try (FileOutputStream out = new FileOutputStream(filePath)) {
+//	            workbook.write(out);
+//	            System.out.println("Updated file saved at: " + filePath);
+//	        }
+//
+//	        workbook.close();
+//	        System.out.println("End: ");
+//	    } catch (Exception e) {
+//	        e.printStackTrace();
+//	    }
+//	}
+//
+//
+//    private static String getCellValue(Cell cell) {
+//        if (cell == null) return "";
+//        return cell.getCellType() == CellType.STRING ? cell.getStringCellValue() : cell.toString();
+//    }
+//
+//    private static String detectPacketType(String content) {
+//        if (content == null || content.trim().isEmpty()) return "Empty";
+//        content = content.trim();
+//        if (content.startsWith("{") || content.startsWith("[")) return "JSON";
+//        if (content.startsWith("<")) return "XML";
+//        return "Invalid";
+//    }
+//
+//    private static void extractTagsWithValidation(String content, StringBuilder remarks, String fieldName, Set<String> tags) {
+//        if (content == null || content.trim().isEmpty()) return;
+//        content = content.trim();
+//        try {
+//            if (content.startsWith("{") || content.startsWith("[")) {
+//                Object json = new JSONTokener(content).nextValue();
+//                if (json instanceof JSONObject) {
+//                    extractJsonKeys((JSONObject) json, tags);
+//                } else if (json instanceof JSONArray) {
+//                    JSONArray array = (JSONArray) json;
+//                    for (int i = 0; i < array.length(); i++) {
+//                        Object item = array.get(i);
+//                        if (item instanceof JSONObject) {
+//                            extractJsonKeys((JSONObject) item, tags);
+//                        }
+//                    }
+//                } else {
+//                    remarks.append(fieldName).append(" is not valid JSON. ");
+//                }
+//            } else if (content.startsWith("<")) {
+//                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+//                DocumentBuilder builder = factory.newDocumentBuilder();
+//                Document doc = builder.parse(new InputSource(new StringReader(content)));
+//                extractXmlTags(doc.getDocumentElement(), tags);
+//            } else {
+//                remarks.append(fieldName).append(" is neither valid JSON nor XML. ");
+//            }
+//        } catch (Exception e) {
+//            remarks.append(fieldName).append(" is not valid JSON or XML. ");
+//        }
+//    }
+//
+//    private static void extractJsonKeys(JSONObject jsonObject, Set<String> keys) {
+//        Iterator<String> iter = jsonObject.keys();
+//        while (iter.hasNext()) {
+//            String key = iter.next();
+//            keys.add(key);
+//            Object value = jsonObject.get(key);
+//            if (value instanceof JSONObject) {
+//                extractJsonKeys((JSONObject) value, keys);
+//            } else if (value instanceof JSONArray) {
+//                for (int i = 0; i < ((JSONArray) value).length(); i++) {
+//                    Object item = ((JSONArray) value).get(i);
+//                    if (item instanceof JSONObject) {
+//                        extractJsonKeys((JSONObject) item, keys);
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    private static void extractXmlTags(Node node, Set<String> tags) {
+//        tags.add(node.getNodeName());
+//        NodeList children = node.getChildNodes();
+//        for (int i = 0; i < children.getLength(); i++) {
+//            Node child = children.item(i);
+//            if (child.getNodeType() == Node.ELEMENT_NODE) {
+//                extractXmlTags(child, tags);
+//            }
+//        }
+//    }
+//}
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import org.xml.sax.InputSource;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String inputFilePath = "input.txt";
+        String outputExcelPath = "output.xlsx";
+
+        List<Map<String, Object>> records = parseInputFile(inputFilePath);
+        writeToExcel(records, outputExcelPath);
+        System.out.println("Excel written to " + outputExcelPath);
+    }
+
+    private static List<Map<String, Object>> parseInputFile(String filePath) {
+        List<Map<String, Object>> records = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Map<String, Object> record = new HashMap<>();
+
+                // Split line based on your pipe format
+                String[] parts = line.split("\t");
+                if (parts.length < 9) continue;
+
+                record.put("API Proxy Name", parts[0]);
+                record.put("API Operation Name", parts[1]);
+                record.put("Business Head2", parts[2]);
+                record.put("Business FPR", parts[3]);
+                record.put("Reference JIRA ID", parts[4]);
+                record.put("API Description", parts[5]);
+                record.put("API_Endpoint_URL", parts[6]);
+
+                String requestPacket = parts[7].trim();
+                String responsePacket = parts[8].trim();
+
+                Set<String> requestTags = extractTags(requestPacket);
+                Set<String> responseTags = extractTags(responsePacket);
+
+                record.put("Request_Tags", requestTags);
+                record.put("Response_Tags", responseTags);
+
+                records.add(record);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return records;
+    }
+
+    private static Set<String> extractTags(String payload) {
+        Set<String> tags = new TreeSet<>();
+        if (payload == null || payload.isEmpty()) return tags;
+
+        try {
+            if (payload.trim().startsWith("{") || payload.trim().startsWith("[")) {
+                // JSON
+                Object json = new JSONTokener(payload).nextValue();
+                if (json instanceof JSONObject) {
+                    extractFromJson((JSONObject) json, tags, "");
+                } else if (json instanceof JSONArray) {
+                    extractFromJsonArray((JSONArray) json, tags, "");
+                }
+            } else if (payload.trim().startsWith("<")) {
+                // XML
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document document = builder.parse(new InputSource(new StringReader(payload)));
+                Element root = document.getDocumentElement();
+                extractFromXml(root, tags, "");
+            }
+        } catch (Exception e) {
+            tags.add("Invalid/Unparsable Payload");
+        }
+
+        return tags;
+    }
+
+    private static void extractFromJson(JSONObject obj, Set<String> tags, String parent) {
+        for (String key : obj.keySet()) {
+            Object value = obj.get(key);
+            String fullKey = parent.isEmpty() ? key : parent + "." + key;
+            tags.add(fullKey);
+            if (value instanceof JSONObject) {
+                extractFromJson((JSONObject) value, tags, fullKey);
+            } else if (value instanceof JSONArray) {
+                extractFromJsonArray((JSONArray) value, tags, fullKey);
+            }
+        }
+    }
+
+    private static void extractFromJsonArray(JSONArray array, Set<String> tags, String parent) {
+        for (int i = 0; i < array.length(); i++) {
+            Object value = array.get(i);
+            if (value instanceof JSONObject) {
+                extractFromJson((JSONObject) value, tags, parent);
+            } else if (value instanceof JSONArray) {
+                extractFromJsonArray((JSONArray) value, tags, parent);
+            }
+        }
+    }
+
+    private static void extractFromXml(Element element, Set<String> tags, String parent) {
+        String tagName = parent.isEmpty() ? element.getTagName() : parent + "." + element.getTagName();
+        tags.add(tagName);
+
+        NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child instanceof Element) {
+                extractFromXml((Element) child, tags, tagName);
+            }
+        }
+    }
+
+    private static void writeToExcel(List<Map<String, Object>> records, String filePath) {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("API Tags");
+
+            // Gather all unique request and response tags
+            Set<String> allRequestTags = new TreeSet<>();
+            Set<String> allResponseTags = new TreeSet<>();
+            for (Map<String, Object> record : records) {
+                allRequestTags.addAll((Set<String>) record.get("Request_Tags"));
+                allResponseTags.addAll((Set<String>) record.get("Response_Tags"));
+            }
+
+            // Header Row
+            Row header = sheet.createRow(0);
+            int col = 0;
+            String[] baseHeaders = {
+                "API Proxy Name", "API Operation Name", "Business Head2", "Business FPR",
+                "Reference JIRA ID", "API Description", "API_Endpoint_URL"
+            };
+            for (String h : baseHeaders) {
+                Cell cell = header.createCell(col++);
+                cell.setCellValue(h);
+            }
+
+            // Request Tag Headers
+            for (String tag : allRequestTags) {
+                Cell cell = header.createCell(col++);
+                cell.setCellValue("Request_" + tag);
+            }
+
+            // Response Tag Headers
+            for (String tag : allResponseTags) {
+                Cell cell = header.createCell(col++);
+                cell.setCellValue("Response_" + tag);
+            }
+
+            // Data Rows
+            int rowNum = 1;
+            for (Map<String, Object> record : records) {
+                Row row = sheet.createRow(rowNum++);
+                int c = 0;
+
+                for (String h : baseHeaders) {
+                    row.createCell(c++).setCellValue(Objects.toString(record.get(h), ""));
+                }
+
+                Set<String> requestTags = (Set<String>) record.get("Request_Tags");
+                for (String tag : allRequestTags) {
+                    row.createCell(c++).setCellValue(requestTags.contains(tag) ? "Y" : "");
+                }
+
+                Set<String> responseTags = (Set<String>) record.get("Response_Tags");
+                for (String tag : allResponseTags) {
+                    row.createCell(c++).setCellValue(responseTags.contains(tag) ? "Y" : "");
+                }
+            }
+
+            // Auto-size columns
+            for (int i = 0; i < col; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            // Write to file
+            try (FileOutputStream fileOut = new FileOutputStream(filePath)) {
+                workbook.write(fileOut);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}

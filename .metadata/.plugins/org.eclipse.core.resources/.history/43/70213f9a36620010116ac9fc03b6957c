@@ -1,0 +1,227 @@
+package com.icici.apigw.dao;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.sql.Clob;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import com.icici.apigw.controller.RestApi;
+import com.icici.apigw.db.DBConnUtil;
+import com.icici.apigw.model.APIInventoryDetails;
+import com.icici.apigw.model.MerchantOnboardingDt;
+
+public class InventoryDaoImpl implements InventoryDao {
+	private static final Logger LOGGER = Logger.getLogger(InventoryDaoImpl.class);
+
+	public List<APIInventoryDetails> fetchInventoryList() {
+		PreparedStatement pstmt = null;
+		List<APIInventoryDetails> inventoryList = new ArrayList<>();
+		ResultSet rs = null;
+		Connection connection = null;
+		try {
+			connection = DBConnUtil.getConnection();
+			pstmt = connection.prepareStatement(
+					"SELECT APPLICATION_NAME,API_PROXY_NAME,API_OPERATION_NAME FROM API_INVENTORY_TBL ORDER BY APPLICATION_NAME,API_PROXY_NAME");
+			rs = pstmt.executeQuery();
+			while (rs.next()) {
+				APIInventoryDetails data = new APIInventoryDetails();
+				data.setAPPLICATION_NAME(Optional.ofNullable(rs.getString(1)).orElse(""));
+				data.setAPI_PROXY_NAME(Optional.ofNullable(rs.getString(2)).orElse(""));
+				data.setAPI_OPERATION_NAME(Optional.ofNullable(rs.getString(3)).orElse(""));
+				inventoryList.add(data);
+			}
+		} catch (SQLException e) {
+			StringWriter ex = new StringWriter();
+			e.printStackTrace(new PrintWriter(ex));
+			LOGGER.error(ex.toString());
+		} finally {
+			DBConnUtil.close(rs, pstmt, connection);
+		}
+		return inventoryList;
+	}
+
+	public String fetchInventoryOperation(String applicationName, String apiProxyName, String apiOperationName) {
+	    PreparedStatement pstmt = null;
+	    JSONArray invOperArr = new JSONArray();
+	    ResultSet rs = null;
+	    Connection connection = null;
+	    try {
+	      connection = DBConnUtil.getConnection();
+	      pstmt = connection.prepareStatement(
+	          "SELECT SR_NO,INTERFACE,APPLICATION_NAME,API_PROXY_NAME,API_OPERATION_NAME,API_VERSION,PROC_CODE,PURPOSE,GROUP_HEAD_NAME,BUSINESS_HEAD_NAME,BUSINESS_FPR_NAME,BUSINESS_GROUP,OWNERSHIP,DESCRIPTION,DOMAIN,ENDPOINT,API_ENDPOINT_URL,REQUEST_PACKET,RESPONSE_PACKET,CREATION_DATE,LAST_MODIFIED_DATE,API_CONSUMER,API_PROVIDER,NGINX_PROXY_NAME,NGINX_API_NAME,NGINX_URL,AO_NAME,API_DEVELOPER,API_LEAD,API_VERTICAL,AUTHENTICATION_MECHANISM_USED,API_COMPLEXITY,PAYLOAD_ENCRYPTION,ENCRYPTION_TYPE,TARGET_ENDPOINT,ENVIRONMENT,COTS_CUSTOMIZED,DEVELOPED_BY,JIRA_ID,TYPE_OF_API,NATURE_OF_API,API_HANDLE_CUSTOMER_INFORMATION,INFO_SCORE1,API_HANDLE_PII,INFO_SCORE2,IS_API_FOR_FINANCIAL_TRANSACTION,INFO_SCORE3,ALLOW_BULK_DATA_TRANSFER,INFO_SCORE4,ENCRYPTION_PROTOCOL_USED_FOR_THE_API,INFO_SCORE5,DIRECT_IMPACT_TO_REVENUE_OR_COST_FOR_BANK,INFO_SCORE6,TOTAL_SCORE,RISK_CLASSIFICATION,NATURE_OF_THE_DATA_TRANSMITTED,API_DATA_CLASSIFICATION,DATA_CLASSIFICATION_STATUS,ORMG_RISK_ASSESSMENT_STATUS,ISG_TESTING,PERIODIC_ISG_TESTING,UPDATED_MONTH,DECOMMISSION_REQUEST,DECOMMISSION_REQUEST_DATE FROM API_INVENTORY_TBL WHERE APPLICATION_NAME=? AND API_PROXY_NAME=? AND API_OPERATION_NAME=?");
+	      pstmt.setString(1, applicationName);
+	      pstmt.setString(2, apiProxyName);
+	      pstmt.setString(3, apiOperationName);
+	      rs = pstmt.executeQuery();
+	      while (rs.next()) {
+	        JSONObject invOperJson = new JSONObject();
+	        JSONObject tech = new JSONObject();
+	        JSONObject techSecurity = new JSONObject();
+	        JSONObject business = new JSONObject();
+	        JSONObject ormg = new JSONObject();
+	        JSONObject isg = new JSONObject();
+	        int srNo = rs.getInt(1);
+	        invOperArr.put(srNo);
+	        tech.put("INTERFACE", rs.getString(2));
+	        tech.put("APPLICATION_NAME", rs.getString(3));
+	        tech.put("API_PROXY_NAME", rs.getString(4));
+	        tech.put("API_OPERATION_NAME", rs.getString(5));
+	        tech.put("API_VERSION", rs.getString(6));
+	        tech.put("PROC_CODE", rs.getString(7));
+	        business.put("PURPOSE", rs.getString(8));
+	        business.put("GROUP_HEAD_NAME", rs.getString(9));
+	        business.put("BUSINESS_HEAD_NAME", rs.getString(10));
+	        business.put("BUSINESS_FPR_NAME", rs.getString(11));
+	        business.put("BUSINESS_GROUP", rs.getString(12));
+	        business.put("OWNERSHIP", rs.getString(13));
+	        business.put("DESCRIPTION", rs.getString(14));
+	        tech.put("DOMAIN", rs.getString(15));
+	        tech.put("ENDPOINT", rs.getString(16));
+	        tech.put("API_ENDPOINT_URL", rs.getString(17));
+	        tech.put("REQUEST_PACKET", rs.getString(18));
+	        tech.put("RESPONSE_PACKET", rs.getString(19));
+	        tech.put("CREATION_DATE", rs.getString(20));
+	        tech.put("LAST_MODIFIED_DATE", rs.getString(21));
+	        business.put("API_CONSUMER", rs.getString(22));
+	        business.put("API_PROVIDER", rs.getString(23));
+	        tech.put("NGINX_PROXY_NAME", rs.getString(24));
+	        tech.put("NGINX_API_NAME", rs.getString(25));
+	        tech.put("NGINX_URL", rs.getString(26));
+	        tech.put("AO_NAME", rs.getString(27));
+	        tech.put("API_DEVELOPER", rs.getString(28));
+	        tech.put("API_LEAD", rs.getString(29));
+	        tech.put("API_VERTICAL", rs.getString(30));
+	        techSecurity.put("AUTHENTICATION_MECHANISM_USED", rs.getString(31));
+	        tech.put("API_COMPLEXITY", rs.getString(32));
+	        techSecurity.put("PAYLOAD_ENCRYPTION", rs.getString(33));
+	        techSecurity.put("ENCRYPTION_TYPE", rs.getString(34));
+	        tech.put("TARGET_ENDPOINT", rs.getString(35));
+	        tech.put("ENVIRONMENT", rs.getString(36));
+	        tech.put("COTS_CUSTOMIZED", rs.getString(37));
+	        tech.put("DEVELOPED_BY", rs.getString(38));
+	        tech.put("JIRA_ID", rs.getString(39));
+	        ormg.put("TYPE_OF_API", rs.getString(40));
+	        ormg.put("NATURE_OF_API", rs.getString(41));
+	        ormg.put("API_HANDLE_CUSTOMER_INFORMATION", rs.getString(42));
+	        ormg.put("INFO_SCORE1", rs.getString(43));
+	        ormg.put("API_HANDLE_PII", rs.getString(44));
+	        ormg.put("INFO_SCORE2", rs.getString(45));
+	        ormg.put("IS_API_FOR_FINANCIAL_TRANSACTION", rs.getString(46));
+	        ormg.put("INFO_SCORE3", rs.getString(47));
+	        ormg.put("ALLOW_BULK_DATA_TRANSFER", rs.getString(48));
+	        ormg.put("INFO_SCORE4", rs.getString(49));
+	        ormg.put("ENCRYPTION_PROTOCOL_USED_FOR_THE_API", rs.getString(50));
+	        ormg.put("INFO_SCORE5", rs.getString(51));
+	        ormg.put("DIRECT_IMPACT_TO_REVENUE_OR_COST_FOR_BANK", rs.getString(52));
+	        ormg.put("INFO_SCORE6", rs.getString(53));
+	        ormg.put("TOTAL_SCORE", rs.getString(54));
+	        ormg.put("RISK_CLASSIFICATION", rs.getString(55));
+	        ormg.put("NATURE_OF_THE_DATA_TRANSMITTED", rs.getString(56));
+	        ormg.put("API_DATA_CLASSIFICATION", rs.getString(57));
+	        ormg.put("DATA_CLASSIFICATION_STATUS", rs.getString(58));
+	        ormg.put("ORMG_RISK_ASSESSMENT_STATUS", rs.getString(59));
+	        isg.put("ISG_TESTING", rs.getString(60));
+	        isg.put("PERIODIC_ISG_TESTING", rs.getString(61));
+	        tech.put("UPDATED_MONTH", rs.getDate(62));
+	        tech.put("DECOMMISSION_REQUEST", rs.getString(63));
+	        tech.put("DECOMMISSION_REQUEST_DATE", rs.getDate(64));
+	        invOperJson.put("TECH", tech);
+	        invOperJson.put("TECH_SECURITY", techSecurity);
+	        invOperJson.put("BUSINESS", business);
+	        invOperJson.put("ORMG", ormg);
+	        invOperJson.put("ISG", isg);
+	        invOperArr.put(invOperJson);
+	      } 
+	    } catch (SQLException e) {
+	      StringWriter ex = new StringWriter();
+	      e.printStackTrace(new PrintWriter(ex));
+	      LOGGER.error(ex.toString());
+	    } finally {
+	      DBConnUtil.close(rs, pstmt, connection);
+	    } 
+	    return invOperArr.toString();
+	  }
+	
+
+	  public String fetchInventoryBySearch(String apiProxyName, String description, String natureOfApi, String apiConsumer, String apiProvider, String tagSearch) {
+	    PreparedStatement pstmt = null;
+	    JSONArray resultArray = new JSONArray();
+	    ResultSet rs = null;
+	    Connection connection = null;
+	    try {
+	      connection = DBConnUtil.getConnection();
+	      StringBuilder query = new StringBuilder(
+	          "SELECT * FROM API_INVENTORY_TBL WHERE 1=1");
+	      List<String> params = new ArrayList<>();
+	      if (apiProxyName != null && !apiProxyName.trim().isEmpty()) {
+	        query.append(" AND API_PROXY_NAME LIKE ?");
+	        params.add("%" + apiProxyName.trim() + "%");
+	      } 
+	      if (description != null && !description.trim().isEmpty()) {
+	        query.append(" AND DESCRIPTION LIKE ?");
+	        params.add("%" + description.trim() + "%");
+	      } 
+	      if (natureOfApi != null && !natureOfApi.trim().isEmpty()) {
+	        query.append(" AND NATURE_OF_API LIKE ?");
+	        params.add("%" + natureOfApi.trim() + "%");
+	      } 
+	      if (apiConsumer != null && !apiConsumer.trim().isEmpty()) {
+	        query.append(" AND API_CONSUMER LIKE ?");
+	        params.add("%" + apiConsumer.trim() + "%");
+	      } 
+	      if (apiProvider != null && !apiProvider.trim().isEmpty()) {
+	        query.append(" AND API_PROVIDER LIKE ?");
+	        params.add("%" + apiProvider.trim() + "%");
+	      } 
+	      if (tagSearch != null && !tagSearch.trim().isEmpty()) {
+	        query.append(" AND (LOWER(REQUEST) LIKE ? OR LOWER(RESPONSE) LIKE ?)");
+	        String keyword = "%" + tagSearch.trim().toLowerCase() + "%";
+	        params.add(keyword);
+	        params.add(keyword);
+	      } 
+	      pstmt = connection.prepareStatement(query.toString());
+	      for (int i = 0; i < params.size(); i++)
+	        pstmt.setString(i + 1, params.get(i)); 
+	      rs = pstmt.executeQuery();
+	      ResultSetMetaData metaData = rs.getMetaData();
+	      int columnCount = metaData.getColumnCount();
+	      while (rs.next()) {
+	        JSONObject row = new JSONObject();
+	        for (int j = 1; j <= columnCount; j++) {
+	          String columnName = metaData.getColumnLabel(j);
+	          Object value = rs.getObject(j);
+	          if (value instanceof Clob)
+	            value = clobToString((Clob)value); 
+	          row.put(columnName, value);
+	        } 
+	        resultArray.put(row);
+	      } 
+	    } catch (SQLException e) {
+	      StringWriter ex = new StringWriter();
+	      e.printStackTrace(new PrintWriter(ex));
+	      LOGGER.error(ex.toString());
+	    } finally {
+	      DBConnUtil.close(rs, pstmt, connection);
+	    } 
+	    return resultArray.toString();
+	  }
+
+
+}

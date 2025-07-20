@@ -1,0 +1,161 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.*;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import java.io.*;
+import java.util.*;
+import org.xml.sax.InputSource;
+
+public class FullTagExtractor {
+
+    public static void main(String[] args) throws Exception {
+        FileInputStream file = new FileInputStream("data_for_parsing_Dhananjay-Copy.xlsx");
+        Workbook workbook = new XSSFWorkbook(file);
+        Sheet sheet = workbook.getSheetAt(0);
+
+        Set<String> requestKeys = new TreeSet<>();
+        Set<String> responseKeys = new TreeSet<>();
+        List<Map<String, String>> requestData = new ArrayList<>();
+        List<Map<String, String>> responseData = new ArrayList<>();
+
+        int requestCol = 6;   // Column G
+        int responseCol = 7;  // Column H
+
+        for (int i = 2; i <= sheet.getLastRowNum(); i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) continue;
+
+            String requestPacket = getCellValue(row.getCell(requestCol));
+            String responsePacket = getCellValue(row.getCell(responseCol));
+
+            Map<String, String> reqMap = extractTags(requestPacket, true);
+            Map<String, String> resMap = extractTags(responsePacket, false);
+
+            requestKeys.addAll(reqMap.keySet());
+            responseKeys.addAll(resMap.keySet());
+
+            requestData.add(reqMap);
+            responseData.add(resMap);
+        }
+
+        writeOutputSheet(requestKeys, responseKeys, requestData, responseData);
+        System.out.println("✅ Output written to Output_with_Tags.xlsx");
+    }
+
+    private static String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            default -> "";
+        };
+    }
+
+    private static Map<String, String> extractTags(String input, boolean isRequest) {
+        Map<String, String> map = new HashMap<>();
+        try {
+            if (input.trim().startsWith("<")) {
+                // XML
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = factory.newDocumentBuilder();
+                Document doc = builder.parse(new InputSource(new StringReader(input)));
+                doc.getDocumentElement().normalize();
+                traverseXml(doc.getDocumentElement(), "", map);
+            } else {
+                // JSON
+                Object json = new JSONTokener(input).nextValue();
+                if (json instanceof JSONObject jsonObj) {
+                    traverseJson(jsonObj, "", map);
+                } else if (json instanceof JSONArray jsonArr) {
+                    for (int i = 0; i < jsonArr.length(); i++) {
+                        Object obj = jsonArr.get(i);
+                        if (obj instanceof JSONObject) {
+                            traverseJson((JSONObject) obj, "", map);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore parsing errors
+        }
+        return map;
+    }
+
+    private static void traverseJson(JSONObject obj, String prefix, Map<String, String> map) {
+        for (String key : obj.keySet()) {
+            Object val = obj.get(key);
+            String newPrefix = prefix.isEmpty() ? key : prefix + "." + key;
+            if (val instanceof JSONObject jsonObj) {
+                traverseJson(jsonObj, newPrefix, map);
+            } else if (val instanceof JSONArray jsonArr) {
+                map.put(newPrefix, jsonArr.toString());
+            } else {
+                map.put(newPrefix, val.toString());
+            }
+        }
+    }
+
+    private static void traverseXml(Node node, String prefix, Map<String, String> map) {
+        NodeList children = node.getChildNodes();
+        String tag = prefix.isEmpty() ? node.getNodeName() : prefix + "." + node.getNodeName();
+
+        boolean hasElementChildren = false;
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
+                hasElementChildren = true;
+                traverseXml(children.item(i), tag, map);
+            }
+        }
+
+        if (!hasElementChildren) {
+            map.put(tag, node.getTextContent().trim());
+        }
+    }
+
+    private static void writeOutputSheet(Set<String> reqKeys, Set<String> resKeys,
+                                         List<Map<String, String>> reqData,
+                                         List<Map<String, String>> resData) throws Exception {
+        Workbook outputWb = new XSSFWorkbook();
+        Sheet outputSheet = outputWb.createSheet("ExtractedTags");
+
+        Row header = outputSheet.createRow(0);
+        int colIndex = 0;
+
+        // Write request tag headers
+        List<String> reqKeyList = new ArrayList<>(reqKeys);
+        for (String key : reqKeyList) {
+            header.createCell(colIndex++).setCellValue("REQ::" + key);
+        }
+
+        // Write response tag headers
+        List<String> resKeyList = new ArrayList<>(resKeys);
+        for (String key : resKeyList) {
+            header.createCell(colIndex++).setCellValue("RES::" + key);
+        }
+
+        // Write each row of tag values
+        for (int i = 0; i < reqData.size(); i++) {
+            Row row = outputSheet.createRow(i + 1);
+            Map<String, String> reqMap = reqData.get(i);
+            Map<String, String> resMap = resData.get(i);
+            int j = 0;
+            for (String key : reqKeyList) {
+                row.createCell(j++).setCellValue(reqMap.getOrDefault(key, ""));
+            }
+            for (String key : resKeyList) {
+                row.createCell(j++).setCellValue(resMap.getOrDefault(key, ""));
+            }
+        }
+
+        try (FileOutputStream out = new FileOutputStream("Output_with_Tags.xlsx")) {
+            outputWb.write(out);
+        }
+    }
+}

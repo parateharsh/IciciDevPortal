@@ -1,0 +1,110 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.XML;
+import java.io.*;
+import java.util.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) throws Exception {
+        String inputFilePath = "data_for_parsing_Dhananjay.xlsx";
+        String outputFilePath = "parsed_output.xlsx";
+        processExcel(inputFilePath, outputFilePath);
+    }
+
+    public static void processExcel(String inputPath, String outputPath) throws Exception {
+        FileInputStream fis = new FileInputStream(new File(inputPath));
+        Workbook workbook = new XSSFWorkbook(fis);
+        Sheet sheet = workbook.getSheetAt(0);
+
+        List<Map<String, String>> rowDataList = new ArrayList<>();
+        Set<String> allKeys = new LinkedHashSet<>();
+
+        // Skip header
+        for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) continue;
+
+            String requestPayload = getCellValue(row.getCell(7));  // Request_Packet
+            String responsePayload = getCellValue(row.getCell(8)); // Response_Packet
+
+            Map<String, String> flatMap = new LinkedHashMap<>();
+            parseAndFlatten(requestPayload, flatMap, "Request");
+            parseAndFlatten(responsePayload, flatMap, "Response");
+
+            rowDataList.add(flatMap);
+            allKeys.addAll(flatMap.keySet());
+        }
+
+        writeToExcel(rowDataList, allKeys, outputPath);
+        workbook.close();
+        fis.close();
+    }
+
+    public static void parseAndFlatten(String payload, Map<String, String> map, String prefix) {
+        try {
+            if (payload == null || payload.isEmpty()) return;
+            JSONObject json;
+            if (payload.trim().startsWith("<")) {
+                json = XML.toJSONObject(payload);
+            } else {
+                json = new JSONObject(payload);
+            }
+            flattenJSON(json, prefix, map);
+        } catch (Exception e) {
+            map.put(prefix + "_Parsing_Error", "Invalid JSON/XML");
+        }
+    }
+
+    public static void flattenJSON(JSONObject obj, String prefix, Map<String, String> map) {
+        for (String key : obj.keySet()) {
+            Object value = obj.get(key);
+            if (value instanceof JSONObject) {
+                flattenJSON((JSONObject) value, prefix + "_" + key, map);
+            } else {
+                map.put(prefix + "_" + key, value.toString());
+            }
+        }
+    }
+
+    public static void writeToExcel(List<Map<String, String>> data, Set<String> keys, String filePath) throws Exception {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Parsed");
+
+        Row headerRow = sheet.createRow(0);
+        int colIndex = 0;
+        for (String key : keys) {
+            headerRow.createCell(colIndex++).setCellValue(key);
+        }
+
+        int rowIndex = 1;
+        for (Map<String, String> row : data) {
+            Row excelRow = sheet.createRow(rowIndex++);
+            colIndex = 0;
+            for (String key : keys) {
+                String value = row.getOrDefault(key, "");
+                excelRow.createCell(colIndex++).setCellValue(value);
+            }
+        }
+
+        FileOutputStream fos = new FileOutputStream(filePath);
+        workbook.write(fos);
+        fos.close();
+        workbook.close();
+        System.out.println("Output written to: " + filePath);
+    }
+
+    private static String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING: return cell.getStringCellValue();
+            case NUMERIC: return String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA: return cell.getCellFormula();
+            default: return "";
+        }
+    }
+}

@@ -1,0 +1,120 @@
+package com.example.excelparser;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import org.json.JSONTokener;
+
+public class TagExtractorWithNestedParsing {
+
+    public static void main(String[] args) {
+        String filePath = "C:\\Path\\To\\Your\\ExcelFile.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            int lastRow = sheet.getLastRowNum();
+
+            for (int i = 1; i <= lastRow; i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                // Process Request_Packet (Column 6 = index 6)
+                Cell reqCell = row.getCell(6);
+                String reqContent = (reqCell != null) ? reqCell.toString() : null;
+                Set<String> requestTags = extractKeys(reqContent);
+                writeTagsToRow(row, requestTags, 8); // Write starting at column 8 (H)
+
+                // Process Response_Packet (Column 7 = index 7)
+                Cell resCell = row.getCell(7);
+                String resContent = (resCell != null) ? resCell.toString() : null;
+                Set<String> responseTags = extractKeys(resContent);
+                writeTagsToRow(row, responseTags, 108); // Start at column 108 (DD)
+            }
+
+            // Save changes to new file
+            try (FileOutputStream fos = new FileOutputStream("C:\\Path\\To\\Your\\UpdatedExcelFile.xlsx")) {
+                workbook.write(fos);
+            }
+
+            System.out.println("Tags extracted and Excel file updated successfully.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Extract keys from JSON or XML
+    private static Set<String> extractKeys(String content) {
+        Set<String> tags = new LinkedHashSet<>();
+        if (content == null || content.trim().isEmpty()) return tags;
+
+        content = content.trim();
+
+        try {
+            if (content.startsWith("{")) {
+                JSONObject obj = new JSONObject(new JSONTokener(content));
+                tags.addAll(flattenJsonKeys(obj, ""));
+            } else if (content.startsWith("<")) {
+                DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                dbf.setNamespaceAware(false);
+                DocumentBuilder db = dbf.newDocumentBuilder();
+                Document doc = db.parse(new ByteArrayInputStream(content.getBytes()));
+                doc.getDocumentElement().normalize();
+                tags.addAll(getXmlAllTags(doc.getDocumentElement(), ""));
+            }
+        } catch (Exception e) {
+            tags.add("Invalid_Packet");
+        }
+
+        return tags;
+    }
+
+    // Recursive JSON key extractor
+    private static Set<String> flattenJsonKeys(JSONObject jsonObj, String prefix) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (String key : jsonObj.keySet()) {
+            Object val = jsonObj.get(key);
+            if (val instanceof JSONObject) {
+                keys.addAll(flattenJsonKeys((JSONObject) val, prefix + key + "."));
+            } else {
+                keys.add(prefix + key);
+            }
+        }
+        return keys;
+    }
+
+    // Recursive XML tag extractor
+    private static Set<String> getXmlAllTags(Element element, String prefix) {
+        Set<String> keys = new LinkedHashSet<>();
+        NodeList children = element.getChildNodes();
+
+        for (int i = 0; i < children.getLength(); i++) {
+            Node n = children.item(i);
+            if (n.getNodeType() == Node.ELEMENT_NODE) {
+                String tagPath = prefix + n.getNodeName();
+                keys.add(tagPath);
+                keys.addAll(getXmlAllTags((Element) n, tagPath + "."));
+            }
+        }
+        return keys;
+    }
+
+    // Write tags into row starting from given column index
+    private static void writeTagsToRow(Row row, Set<String> tags, int startCol) {
+        int colIndex = startCol;
+        for (String tag : tags) {
+            Cell cell = row.getCell(colIndex);
+            if (cell == null) cell = row.createCell(colIndex);
+            cell.setCellValue(tag);
+            colIndex++;
+        }
+    }
+}

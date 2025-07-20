@@ -1,0 +1,212 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.XML;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String filePath = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+
+            Row headerRow = sheet.getRow(0);
+            Map<String, Integer> columnMap = new HashMap<>();
+            for (Cell cell : headerRow) {
+                columnMap.put(cell.getStringCellValue().trim(), cell.getColumnIndex());
+            }
+
+            Integer requestIndex = columnMap.get("Request_Packet");
+            Integer responseIndex = columnMap.get("Response_Packet");
+
+            if (requestIndex == null && responseIndex == null) {
+                System.out.println("Request_Packet or Response_Packet column not found. Exiting.");
+                return;
+            }
+
+            int lastHeaderCol = headerRow.getLastCellNum();
+            Set<String> uniqueTags = new LinkedHashSet<>();
+
+            // First pass: Collect all tags
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                List<String> packets = new ArrayList<>();
+                if (requestIndex != null) {
+                    Cell cell = row.getCell(requestIndex);
+                    if (cell != null) packets.add(cell.getStringCellValue());
+                }
+                if (responseIndex != null) {
+                    Cell cell = row.getCell(responseIndex);
+                    if (cell != null) packets.add(cell.getStringCellValue());
+                }
+
+                for (String packet : packets) {
+                    if (packet == null || packet.isEmpty()) continue;
+                    try {
+                        if (packet.trim().startsWith("<")) {
+                            uniqueTags.addAll(extractXmlTags(packet));
+                        } else if (packet.trim().startsWith("{")) {
+                            uniqueTags.addAll(extractJsonTags(new JSONObject(packet)));
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error parsing packet on row " + (i + 1));
+                    }
+                }
+            }
+
+            // Add headers for new tags
+            int colIndex = lastHeaderCol;
+            Map<String, Integer> tagToColumn = new LinkedHashMap<>();
+            for (String tag : uniqueTags) {
+                Cell cell = headerRow.createCell(colIndex);
+                cell.setCellValue(tag);
+                tagToColumn.put(tag, colIndex++);
+            }
+
+            // Second pass: Write extracted tag values
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                Map<String, String> allTags = new HashMap<>();
+
+                List<String> packets = new ArrayList<>();
+                if (requestIndex != null) {
+                    Cell cell = row.getCell(requestIndex);
+                    if (cell != null) packets.add(cell.getStringCellValue());
+                }
+                if (responseIndex != null) {
+                    Cell cell = row.getCell(responseIndex);
+                    if (cell != null) packets.add(cell.getStringCellValue());
+                }
+
+                for (String packet : packets) {
+                    if (packet == null || packet.isEmpty()) continue;
+                    try {
+                        if (packet.trim().startsWith("<")) {
+                            allTags.putAll(extractXmlTagValues(packet));
+                        } else if (packet.trim().startsWith("{")) {
+                            allTags.putAll(extractJsonTagValues(new JSONObject(packet)));
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error parsing packet on row " + (i + 1));
+                    }
+                }
+
+                for (Map.Entry<String, String> entry : allTags.entrySet()) {
+                    Integer tagCol = tagToColumn.get(entry.getKey());
+                    if (tagCol != null) {
+                        Cell cell = row.createCell(tagCol);
+                        cell.setCellValue(entry.getValue());
+                    }
+                }
+            }
+
+            // Overwrite same file
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                workbook.write(fos);
+            }
+
+            System.out.println("Tags extracted and added successfully in the same file.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Extract XML tags only
+    private static Set<String> extractXmlTags(String xml) throws Exception {
+        Set<String> tags = new HashSet<>();
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        InputSource source = new InputSource(new StringReader(xml));
+        Document doc = db.parse(source);
+        traverseXml(doc.getDocumentElement(), tags, null);
+        return tags;
+    }
+
+    // Extract XML tag values
+    private static Map<String, String> extractXmlTagValues(String xml) throws Exception {
+        Map<String, String> tagMap = new HashMap<>();
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        InputSource source = new InputSource(new StringReader(xml));
+        Document doc = db.parse(source);
+        traverseXml(doc.getDocumentElement(), tagMap, "");
+        return tagMap;
+    }
+
+    private static void traverseXml(Element element, Collection collection, String path) {
+        NodeList children = element.getChildNodes();
+        String tag = path == null ? element.getTagName() : path + "." + element.getTagName();
+        boolean hasChildElements = false;
+
+        for (int i = 0; i < children.getLength(); i++) {
+            Node node = children.item(i);
+            if (node instanceof Element) {
+                traverseXml((Element) node, collection, tag);
+                hasChildElements = true;
+            }
+        }
+
+        if (!hasChildElements) {
+            if (collection instanceof Set) {
+                ((Set<String>) collection).add(tag);
+            } else if (collection instanceof Map) {
+                ((Map<String, String>) collection).put(tag, element.getTextContent());
+            }
+        }
+    }
+
+    // Extract JSON tag names
+    private static Set<String> extractJsonTags(JSONObject json) {
+        Set<String> tags = new HashSet<>();
+        extractJsonTagsRecursive(json, "", tags);
+        return tags;
+    }
+
+    // Extract JSON tag name-value pairs
+    private static Map<String, String> extractJsonTagValues(JSONObject json) {
+        Map<String, String> tagMap = new HashMap<>();
+        extractJsonValuesRecursive(json, "", tagMap);
+        return tagMap;
+    }
+
+    private static void extractJsonTagsRecursive(JSONObject json, String prefix, Set<String> tags) {
+        for (String key : json.keySet()) {
+            Object val = json.get(key);
+            String newKey = prefix.isEmpty() ? key : prefix + "." + key;
+            if (val instanceof JSONObject) {
+                extractJsonTagsRecursive((JSONObject) val, newKey, tags);
+            } else {
+                tags.add(newKey);
+            }
+        }
+    }
+
+    private static void extractJsonValuesRecursive(JSONObject json, String prefix, Map<String, String> tagMap) {
+        for (String key : json.keySet()) {
+            Object val = json.get(key);
+            String newKey = prefix.isEmpty() ? key : prefix + "." + key;
+            if (val instanceof JSONObject) {
+                extractJsonValuesRecursive((JSONObject) val, newKey, tagMap);
+            } else {
+                tagMap.put(newKey, val.toString());
+            }
+        }
+    }
+}

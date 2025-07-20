@@ -1,0 +1,140 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String excelPath = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx"; // Update path if needed
+
+        try (InputStream inputStream = new FileInputStream(excelPath);
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Map<String, Integer> headerMap = new HashMap<>();
+
+            // Extract header
+            Row headerRow = sheet.getRow(0);
+            if (headerRow != null) {
+                for (Cell cell : headerRow) {
+                    if (cell.getCellType() == CellType.STRING) {
+                        headerMap.put(cell.getStringCellValue().trim(), cell.getColumnIndex());
+                    }
+                }
+            }
+
+            Integer reqIndex = headerMap.get("Request_Packet");
+            Integer resIndex = headerMap.get("Response_Packet");
+
+            if (reqIndex == null || resIndex == null) {
+                System.err.println("Missing 'Request_Packet' or 'Response_Packet' columns in Excel.");
+                return;
+            }
+
+            // Iterate data rows
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String requestStr = getCellValue(row.getCell(reqIndex));
+                String responseStr = getCellValue(row.getCell(resIndex));
+
+                System.out.println("----- Row " + i + " -----");
+                System.out.println("Request Tags:");
+                extractTags(requestStr);
+
+                System.out.println("Response Tags:");
+                extractTags(responseStr);
+                System.out.println();
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String getCellValue(Cell cell) {
+        if (cell == null) return "";
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue().trim();
+            case NUMERIC -> String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            default -> "";
+        };
+    }
+
+    private static void extractTags(String packet) {
+        packet = packet.trim();
+        if (packet.startsWith("{")) {
+            extractJsonTags(packet);
+        } else if (packet.startsWith("<")) {
+            extractXmlTags(packet);
+        } else {
+            System.out.println("Unknown packet format.");
+        }
+    }
+
+    private static void extractJsonTags(String jsonString) {
+        try {
+            JSONObject json = new JSONObject(new JSONTokener(jsonString));
+            extractJsonRecursive(json, "");
+        } catch (Exception e) {
+            System.out.println("Invalid JSON: " + e.getMessage());
+        }
+    }
+
+    private static void extractJsonRecursive(JSONObject json, String prefix) {
+        for (String key : json.keySet()) {
+            Object value = json.get(key);
+            String fullKey = prefix.isEmpty() ? key : prefix + "." + key;
+            if (value instanceof JSONObject) {
+                extractJsonRecursive((JSONObject) value, fullKey);
+            } else {
+                System.out.println(fullKey + " : " + value);
+            }
+        }
+    }
+
+    private static void extractXmlTags(String xmlString) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            InputSource is = new InputSource(new StringReader(xmlString));
+            Document doc = builder.parse(is);
+
+            Element root = doc.getDocumentElement();
+            extractXmlRecursive(root, "");
+
+        } catch (Exception e) {
+            System.out.println("Invalid XML: " + e.getMessage());
+        }
+    }
+
+    private static void extractXmlRecursive(Element element, String prefix) {
+        String name = element.getNodeName();
+        String fullPath = prefix.isEmpty() ? name : prefix + "." + name;
+
+        if (element.getChildNodes().getLength() == 1 && element.getFirstChild().getNodeType() == Node.TEXT_NODE) {
+            System.out.println(fullPath + " : " + element.getTextContent().trim());
+        } else {
+            NodeList children = element.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                Node node = children.item(i);
+                if (node instanceof Element) {
+                    extractXmlRecursive((Element) node, fullPath);
+                }
+            }
+        }
+    }
+}

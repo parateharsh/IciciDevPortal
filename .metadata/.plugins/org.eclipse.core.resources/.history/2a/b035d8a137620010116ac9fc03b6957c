@@ -1,0 +1,53 @@
+package com.icici.apigw.model;
+
+
+public class APIInventoryDetails {
+	
+	private String aPPLICATION_NAME;
+	private String aPI_PROXY_NAME;
+	private String aPI_OPERATION_NAME;
+	private int SR_NO;
+	public String getaPPLICATION_NAME() {
+		return aPPLICATION_NAME;
+	}
+	public void setaPPLICATION_NAME(String aPPLICATION_NAME) {
+		this.aPPLICATION_NAME = aPPLICATION_NAME;
+	}
+	public String getaPI_PROXY_NAME() {
+		return aPI_PROXY_NAME;
+	}
+	public void setaPI_PROXY_NAME(String aPI_PROXY_NAME) {
+		this.aPI_PROXY_NAME = aPI_PROXY_NAME;
+	}
+	public String getaPI_OPERATION_NAME() {
+		return aPI_OPERATION_NAME;
+	}
+	public void setaPI_OPERATION_NAME(String aPI_OPERATION_NAME) {
+		this.aPI_OPERATION_NAME = aPI_OPERATION_NAME;
+	}
+	public int getSR_NO() {
+		return SR_NO;
+	}
+	public void setSR_NO(String sR_NO) {
+		SR_NO = sR_NO;
+	}
+	public String getAPPLICATION_NAME() {
+		return aPPLICATION_NAME;
+	}
+	public void setAPPLICATION_NAME(String aPPLICATION_NAME) {
+		this.aPPLICATION_NAME = aPPLICATION_NAME;
+	}
+	public String getAPI_OPERATION_NAME() {
+		return aPI_OPERATION_NAME;
+	}
+	public void setAPI_OPERATION_NAME(String aPI_OPERATION_NAME) {
+		this.aPI_OPERATION_NAME = aPI_OPERATION_NAME;
+	}
+	public String getAPI_PROXY_NAME() {
+		return aPI_PROXY_NAME;
+	}
+	public void setAPI_PROXY_NAME(String aPI_PROXY_NAME) {
+		this.aPI_PROXY_NAME = aPI_PROXY_NAME;
+	}
+}
+

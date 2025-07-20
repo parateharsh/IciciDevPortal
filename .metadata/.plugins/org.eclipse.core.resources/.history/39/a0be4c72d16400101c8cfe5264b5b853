@@ -1,0 +1,127 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.XML;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import java.util.regex.*;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String filePath = "D:\\temp\\data_for_parsing_Dhananjay-Copy.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+            if (headerRow == null) throw new IllegalStateException("Header row is empty.");
+
+            int colCount = headerRow.getPhysicalNumberOfCells();
+            Map<Integer, String> newColHeaders = new HashMap<>();
+
+            for (int col = 0; col < colCount; col++) {
+                String colName = headerRow.getCell(col).getStringCellValue().trim();
+                newColHeaders.put(col, "Parsed_" + colName);
+            }
+
+            // Add new headers
+            int newStartCol = colCount;
+            for (int col = 0; col < colCount; col++) {
+                Cell cell = headerRow.createCell(newStartCol + col);
+                cell.setCellValue(newColHeaders.get(col));
+            }
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                for (int col = 0; col < colCount; col++) {
+                    Cell cell = row.getCell(col);
+                    String raw = cell != null ? cell.toString().trim() : "";
+
+                    String parsedResult = "";
+
+                    if (raw.startsWith("{") && raw.endsWith("}")) {
+                        // JSON
+                        parsedResult = extractTagsFromJson(raw);
+                    } else if (raw.startsWith("<") && raw.endsWith(">")) {
+                        // XML
+                        parsedResult = extractTagsFromXml(raw);
+                    }
+
+                    if (!parsedResult.isEmpty()) {
+                        Cell parsedCell = row.createCell(newStartCol + col);
+                        parsedCell.setCellValue(parsedResult);
+                    }
+                }
+            }
+
+            // Save back to same file
+            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+                workbook.write(fos);
+            }
+
+            System.out.println("Parsing complete. Tags written in same sheet.");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String extractTagsFromJson(String jsonStr) {
+        try {
+            JSONObject jsonObject = new JSONObject(jsonStr);
+            Set<String> tagSet = new HashSet<>();
+            collectJsonKeys(jsonObject, tagSet);
+            return String.join(",", tagSet);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void collectJsonKeys(JSONObject jsonObject, Set<String> tagSet) {
+        for (String key : jsonObject.keySet()) {
+            tagSet.add(key);
+            Object value = jsonObject.get(key);
+            if (value instanceof JSONObject) {
+                collectJsonKeys((JSONObject) value, tagSet);
+            }
+        }
+    }
+
+    private static String extractTagsFromXml(String xmlStr) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new InputSource(new StringReader(xmlStr)));
+
+            Set<String> tagSet = new LinkedHashSet<>();
+            traverseXml(doc.getDocumentElement(), tagSet);
+            return String.join(",", tagSet);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void traverseXml(Node node, Set<String> tagSet) {
+        if (node.getNodeType() == Node.ELEMENT_NODE) {
+            tagSet.add(node.getNodeName());
+            NodeList children = node.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                traverseXml(children.item(i), tagSet);
+            }
+        }
+    }
+}

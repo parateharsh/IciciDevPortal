@@ -1,0 +1,126 @@
+package com.example.demo;
+
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
+import org.json.JSONTokener;
+import org.w3c.dom.*;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.Iterator;
+
+public class TagExtractorWithDynamicColumns {
+
+    public static void main(String[] args) {
+        String inputFile = "D:\\tamp\\data_for_parsing_Dhananjay-Copy.xlsx";
+        String outputFile = "parsed_output.xlsx";
+
+        try (FileInputStream fis = new FileInputStream(new File(inputFile));
+             Workbook inputWorkbook = new XSSFWorkbook(fis);
+             Workbook outputWorkbook = new XSSFWorkbook()) {
+
+            Sheet inputSheet = inputWorkbook.getSheetAt(0);
+            Sheet outputSheet = outputWorkbook.createSheet("ExtractedTags");
+
+            Row header = outputSheet.createRow(0);
+            header.createCell(0).setCellValue("Row No.");
+            header.createCell(1).setCellValue("Request Tags");
+            header.createCell(2).setCellValue("Response Tags");
+
+            Iterator<Row> iterator = inputSheet.iterator();
+            iterator.next(); // skip original header
+
+            int rowIndex = 1;
+            while (iterator.hasNext()) {
+                Row row = iterator.next();
+                Cell requestCell = row.getCell(7);  // Request_Packet column
+                Cell responseCell = row.getCell(8); // Response_Packet column
+
+                String requestData = getCellValueAsString(requestCell);
+                String responseData = getCellValueAsString(responseCell);
+
+                String requestTags = extractTags(requestData);
+                String responseTags = extractTags(responseData);
+
+                Row outputRow = outputSheet.createRow(rowIndex++);
+                outputRow.createCell(0).setCellValue(row.getRowNum());
+                outputRow.createCell(1).setCellValue(requestTags);
+                outputRow.createCell(2).setCellValue(responseTags);
+            }
+
+            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                outputWorkbook.write(fos);
+                System.out.println("✅ Output written to: " + outputFile);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String getCellValueAsString(Cell cell) {
+        if (cell == null) return "";
+        switch (cell.getCellType()) {
+            case STRING: return cell.getStringCellValue();
+            case NUMERIC: return String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA: return cell.getCellFormula();
+            default: return "";
+        }
+    }
+
+    private static String extractTags(String input) {
+        if (input == null || input.trim().isEmpty()) return "";
+
+        input = input.trim();
+        if (input.startsWith("{")) {
+            return extractJsonTags(input);
+        } else if (input.startsWith("<")) {
+            return extractXmlTags(input);
+        } else {
+            return "[Invalid Format]";
+        }
+    }
+
+    private static String extractJsonTags(String jsonStr) {
+        try {
+            JSONObject json = new JSONObject(new JSONTokener(jsonStr));
+            return json.keySet().toString();
+        } catch (Exception e) {
+            return "[Invalid JSON]";
+        }
+    }
+
+    private static String extractXmlTags(String xmlStr) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setIgnoringComments(true);
+            factory.setCoalescing(true);
+            factory.setIgnoringElementContentWhitespace(true);
+
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            InputSource is = new InputSource(new StringReader(xmlStr));
+            Document doc = builder.parse(is);
+
+            Node root = doc.getDocumentElement();
+            StringBuilder sb = new StringBuilder();
+            sb.append("<").append(root.getNodeName()).append(">");
+
+            NodeList children = root.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                Node n = children.item(i);
+                if (n.getNodeType() == Node.ELEMENT_NODE) {
+                    sb.append(" <").append(n.getNodeName()).append(">");
+                }
+            }
+
+            return sb.toString();
+
+        } catch (Exception e) {
+            return "[Invalid XML]";
+        }
+    }
+}
